@@ -1,0 +1,129 @@
+// Cargar la base de datos ENEMDU
+use enemdu_data.dta, clear
+
+// Renombrar las variables para mayor claridad académica
+rename p20 continuidad
+rename p44f seguro_social
+rename p44g seguro_medico
+rename p44h guarderia
+rename p44i capacitacion
+rename p44d vacaciones
+rename p03 edad
+rename p10a educacion
+rename p06 horas
+rename p41 ingreso
+rename joven joven
+
+describe p02 empleo
+
+// Filtrar solo mujeres empleadas
+keep if p02 == 2 & empleo == "1"
+
+// Re-codificar la variable de continuidad laboral para que sea binaria
+replace continuidad = "1" if continuidad == "1"  // Indica que trabajó
+replace continuidad = "0" if continuidad == "2"  // Indica que no trabajó
+
+// Verificar la recodificación
+tabulate continuidad
+
+// Convertir la variable continuidad de texto a números
+destring continuidad, replace
+
+summarize continuidad
+
+// Convertir variables de texto a formato numérico
+destring seguro_social, replace
+destring seguro_medico, replace
+destring guarderia, replace
+destring capacitacion, replace
+destring vacaciones, replace
+destring educacion, replace
+destring horas, replace
+destring ingreso, replace
+
+// Crear variables binarias para los beneficios laborales
+gen seguro = (seguro_social == 1)
+gen seguro_medico_bin = (seguro_medico == 1)
+gen guarderia_bin = (guarderia == 1)
+gen capacitacion_bin = (capacitacion == 1)
+gen vacaciones_bin = (vacaciones == 1)
+
+// Análisis descriptivo de las variables principales
+// Frecuencias de beneficios laborales
+tabulate seguro
+tabulate seguro_medico_bin
+tabulate guarderia_bin
+tabulate capacitacion_bin
+tabulate vacaciones_bin
+
+graph bar (count), over(continuidad, label(angle(45))) ///
+    title("Distribución de Continuidad Laboral") ///
+    bar(1, color(blue))
+
+graph bar (mean) seguro, over(continuidad, label(angle(45))) ///
+    title("Acceso a Seguro Social por Continuidad Laboral") ///
+    ytitle("Proporción") bar(1, color(green))
+	
+graph bar (mean) vacaciones_bin, over(continuidad, label(angle(45))) ///
+    title("Acceso a Vacaciones por Continuidad Laboral") ///
+    ytitle("Proporción") bar(1, color(orange))
+
+
+graph bar (mean) seguro guarderia capacitacion vacaciones, ///
+    over(educacion, label(angle(45))) ///
+    title("Acceso a Beneficios Laborales por Nivel Educativo") ///
+    stack ytitle("Proporción")
+
+gen grupo_edad = cond(edad < 30, 1, 2)
+label define grupo_edad 1 "Jóvenes (<30)" 2 "Mayores (≥30)"
+label values grupo_edad grupo_edad
+
+graph bar (mean) continuidad, over(grupo_edad, label(angle(45))) ///
+    title("Continuidad Laboral por Grupo de Edad") ///
+    ytitle("Proporción de Continuidad") bar(1, color(purple))
+	
+graph bar (mean) seguro_social guarderia capacitacion vacaciones, ///
+    over(ingreso, label(angle(45))) ///
+    title("Acceso a Beneficios Laborales por Nivel de Ingreso") ///
+    legend(label(1 "Seguro Social") label(2 "Guardería") label(3 "Capacitación") label(4 "Vacaciones"))
+
+
+
+
+// Media de la continuidad laboral para mujeres con y sin acceso a seguro social
+ttest continuidad, by(seguro)
+
+// Media de la continuidad laboral para mujeres con y sin acceso a guardería
+ttest continuidad, by(guarderia_bin)
+
+// Media de la continuidad laboral para mujeres con y sin acceso a capacitación
+ttest continuidad, by(capacitacion_bin)
+
+// Crear una variable para indicar si la mujer es joven (<30 años)
+gen joven = (edad < 30)
+
+summarize continuidad seguro guarderia_bin capacitacion_bin vacaciones_bin edad educacion horas ingreso conglomerado ciudad
+
+// Modelo logit multinivel con conglomerado como primer nivel y ciudad como segundo nivel
+melogit continuidad seguro guarderia_bin capacitacion_bin vacaciones_bin edad educacion horas ingreso || conglomerado: || ciudad:
+estimates store logit_multinivel
+esttab logit_multinivel using resultadosgen.rtf, replace ///
+mtitle("Modelo Logit Multinivel") ///
+b(%9.3f) p(%9.3f) ///
+title("Resultados del Modelo Logit Multinivel") ///
+varwidth(25) plain
+
+// Modelo logit sin estructura jerárquica
+logit continuidad seguro guarderia_bin capacitacion_bin vacaciones_bin joven educacion horas ingreso
+
+// Efectos marginales promedio para todas las variables independientes
+margins, dydx(*)
+
+marginsplot
+
+// Efectos marginales para seguro social y capacitación en distintos niveles
+margins, dydx(seguro capacitacion_bin) at(seguro=(0 1) capacitacion_bin=(0 1))
+
+marginsplot
+
+
